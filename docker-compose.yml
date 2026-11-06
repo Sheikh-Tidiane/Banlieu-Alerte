@@ -1,5 +1,9 @@
 # Base de données de développement (MySQL 8.4 LTS).
 # Port hôte 3307 : le 3306 est souvent déjà pris par un MySQL local.
+# Nom fixe : le même projet, le même conteneur et le même volume sur toutes les machines,
+# quel que soit le nom du dossier du projet (sinon Docker prend le nom du dossier).
+name: banlieue-alerte
+
 services:
   db:
     image: mysql:8.4.7
@@ -25,3 +29,4 @@ services:
 
 volumes:
   db-data:
+    name: banlieue-alerte-db-data
