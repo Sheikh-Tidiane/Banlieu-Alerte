@@ -2,7 +2,6 @@
 
 PWA de signalement collaboratif, d'indice de risque et d'alerte pour les inondations et l'assainissement à Thiaroye et dans le département de Pikine (Sénégal). Projet présenté au concours Banlieue Smart Genius (catégorie Smart Territory).
 
-> État : **Phase 6** terminée, en attente de validation. Les six phases du Socle et de la Finale sont réalisées. Voir `docs/PROGRESS.md`.
 
 Boucle du produit : **prédire** (indice de risque par quartier) → **alerter** (après approbation humaine) → **signaler** (les habitants, sans compte) → **traiter** (back-office, escalade, curage) → **apprendre** (épisodes, étiquettes, qualité de l'indice). L'indice est un indice **indicatif** par règles, pas une probabilité.
 
