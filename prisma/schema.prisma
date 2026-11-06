@@ -1,0 +1,1025 @@
+// Schéma de données – Socle (Phase 1). Référence : docs/CAHIER_DES_CHARGES.md §9.
+// Phase 4 : indice de risque, alertes et abonnements. Épisodes, curage et escalade viennent
+// en Phase 5 (D-015). Les tables Vision ne sont pas créées.
+// Toute table de contenu porte `isDemo` : les données de démonstration sont repérables
+// en base et exclues de toute évaluation (CDC §1.3, EXG-16).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ---------------------------------------------------------------------------
+// Utilisateurs et accès
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CITIZEN
+  DELEGATE
+  AGENT
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+model User {
+  id                  String     @id @default(cuid())
+  name                String     @db.VarChar(120)
+  email               String?    @unique @db.VarChar(254)
+  passwordHash        String?    @db.VarChar(255)
+  /// Téléphone jamais stocké en clair (CDC §11).
+  phoneHash           String?    @unique @db.VarChar(128)
+  role                Role       @default(CITIZEN)
+  locale              String     @default("fr") @db.VarChar(5)
+  /// Score de fiabilité interne, jamais affiché publiquement (CDC §4.2).
+  reliabilityScore    Int        @default(50)
+  /// Double authentification (EXG-41, D-064) : secret TOTP chiffré (AES-256-GCM).
+  totpSecret          String?    @db.Text
+  totpEnabledAt       DateTime?
+  /// Dernière période TOTP acceptée : un code ne sert qu'une fois.
+  totpLastStep        Int?
+  /// Consentement : notifications d'avancement de ses signalements (D-055).
+  notifyStatusChanges Boolean    @default(true)
+  status              UserStatus @default(ACTIVE)
+  /// Portée géographique d'un agent.
+  communeId           String?
+  isDemo              Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  commune               Commune?              @relation(fields: [communeId], references: [id])
+  delegatedNeighborhood Neighborhood[]        @relation("NeighborhoodDelegate")
+  reports               Report[]              @relation("ReportAuthor")
+  votes                 ReportVote[]
+  comments              ReportComment[]
+  statusChanges         ReportStatusHistory[]
+  invitationsSent       Invitation[]          @relation("InvitationCreator")
+  invitationsAccepted   Invitation[]          @relation("InvitationAcceptor")
+  auditLogs             AuditLog[]
+  abuseFlagsRaised      AbuseFlag[]           @relation("AbuseFlagReporter")
+  abuseFlagsReceived    AbuseFlag[]           @relation("AbuseFlagTargetUser")
+  sessions              Session[]
+  assignedReports       Report[]              @relation("ReportAssignee")
+  passwordResets        PasswordReset[]       @relation("PasswordResetUser")
+  passwordResetsCreated PasswordReset[]       @relation("PasswordResetCreator")
+  ruleVersionsCreated   RuleVersion[]         @relation("RuleVersionCreator")
+  alertsCreated         Alert[]               @relation("AlertCreator")
+  alertApprovals        AlertApproval[]       @relation("AlertApprover")
+  alertDeliveries       AlertDelivery[]       @relation("AlertDeliveryUser")
+  subscriptions         Subscription[]
+  episodesCreated       RainEpisode[]         @relation("EpisodeCreator")
+  episodesValidated     RainEpisode[]         @relation("EpisodeValidator")
+  labels                EpisodeLabel[]        @relation("LabelAuthor")
+  labelChanges          EpisodeLabelHistory[] @relation("LabelChanger")
+  feedbackPrompts       FeedbackPrompt[]
+  notifications         UserNotification[]
+  cleanupOperations     CleanupOperation[]    @relation("CleanupCreator")
+  recoveryCodes         RecoveryCode[]
+
+  @@index([role])
+  @@map("users")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+/// Comptes sensibles (délégué, agent, administrateur) : invitation uniquement,
+/// jeton à usage unique, haché, expirant et révocable (EXG-33).
+model Invitation {
+  id                  String           @id @default(cuid())
+  email               String           @db.VarChar(254)
+  role                Role
+  scopeCommuneId      String?
+  scopeNeighborhoodId String?
+  tokenHash           String           @unique @db.VarChar(128)
+  expiresAt           DateTime
+  status              InvitationStatus @default(PENDING)
+  createdById         String
+  acceptedById        String?
+  acceptedAt          DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime         @default(now())
+
+  createdBy         User          @relation("InvitationCreator", fields: [createdById], references: [id])
+  acceptedBy        User?         @relation("InvitationAcceptor", fields: [acceptedById], references: [id])
+  scopeCommune      Commune?      @relation(fields: [scopeCommuneId], references: [id])
+  scopeNeighborhood Neighborhood? @relation(fields: [scopeNeighborhoodId], references: [id])
+
+  @@index([email, status])
+  @@map("invitations")
+}
+
+/// Session de connexion (D-034). Seule l'empreinte SHA-256 du jeton est stockée.
+model Session {
+  id            String    @id @default(cuid())
+  tokenHash     String    @unique @db.VarChar(64)
+  userId        String
+  expiresAt     DateTime
+  lastSeenAt    DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  /// Second facteur vérifié pour cette session (administrateur, EXG-41).
+  mfaVerifiedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Code de secours du second facteur, à usage unique, stocké haché.
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String    @unique @db.VarChar(64)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("recovery_codes")
+}
+
+/// Lien de réinitialisation du mot de passe, créé par un administrateur (pas d'e-mail réel) :
+/// jeton à usage unique, haché, expirant.
+model PasswordReset {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique @db.VarChar(64)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  user      User @relation("PasswordResetUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("PasswordResetCreator", fields: [createdById], references: [id])
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+/// Journal d'audit des actions sensibles. Aucune donnée personnelle dans `metadata`.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String   @db.VarChar(80)
+  entityType String   @db.VarChar(60)
+  entityId   String?  @db.VarChar(40)
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum AbuseFlagStatus {
+  OPEN
+  DISMISSED
+  ACTIONED
+}
+
+model AbuseFlag {
+  id           String          @id @default(cuid())
+  reportId     String?
+  commentId    String?
+  targetUserId String?
+  reporterId   String?
+  reason       String          @db.VarChar(500)
+  status       AbuseFlagStatus @default(OPEN)
+  createdAt    DateTime        @default(now())
+
+  report     Report?        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  comment    ReportComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  targetUser User?          @relation("AbuseFlagTargetUser", fields: [targetUserId], references: [id])
+  reporter   User?          @relation("AbuseFlagReporter", fields: [reporterId], references: [id])
+
+  @@index([status])
+  @@map("abuse_flags")
+}
+
+// ---------------------------------------------------------------------------
+// Géographie (CDC §4.5, D-003) : le quartier est une étiquette, la position GPS
+// reste la référence. Coordonnées en Decimal(9,6) (~0,1 m), D-014.
+// ---------------------------------------------------------------------------
+
+model Commune {
+  id         String   @id @default(cuid())
+  name       String   @db.VarChar(120)
+  department String   @db.VarChar(120)
+  isDemo     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  neighborhoods Neighborhood[]
+  agents        User[]
+  invitations   Invitation[]
+
+  @@unique([department, name])
+  @@map("communes")
+}
+
+enum BoundaryStatus {
+  APPROXIMATE
+  VALIDATED
+}
+
+model Neighborhood {
+  id             String         @id @default(cuid())
+  name           String         @db.VarChar(120)
+  communeId      String
+  /// Contour facultatif (GeoJSON Polygon). Absent : le quartier est défini par ses repères.
+  boundary       Json?
+  boundaryStatus BoundaryStatus @default(APPROXIMATE)
+  isPilot        Boolean        @default(false)
+  delegateId     String?
+  isDemo         Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  commune         Commune                    @relation(fields: [communeId], references: [id])
+  delegate        User?                      @relation("NeighborhoodDelegate", fields: [delegateId], references: [id])
+  landmarks       NeighborhoodLandmark[]
+  aliases         NeighborhoodAlias[]
+  reports         Report[]
+  invitations     Invitation[]
+  riskCells       RiskCell[]
+  predictions     RiskPrediction[]
+  alerts          AlertNeighborhood[]
+  subscribers     SubscriptionNeighborhood[]
+  feedbackPrompts FeedbackPrompt[]
+
+  @@unique([communeId, name])
+  @@index([isPilot])
+  @@map("neighborhoods")
+}
+
+enum LandmarkKind {
+  MARKET
+  SCHOOL
+  MOSQUE
+  STATION
+  HEALTH
+  OTHER
+}
+
+model NeighborhoodLandmark {
+  id             String       @id @default(cuid())
+  neighborhoodId String
+  name           String       @db.VarChar(160)
+  kind           LandmarkKind @default(OTHER)
+  lat            Decimal      @db.Decimal(9, 6)
+  lng            Decimal      @db.Decimal(9, 6)
+  radiusMeters   Int          @default(400)
+  /// Source du repère (relevé terrain, OpenStreetMap, mairie…), consignée aussi dans DECISIONS.md.
+  source         String?      @db.VarChar(200)
+  isDemo         Boolean      @default(false)
+
+  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+
+  @@index([lat, lng])
+  @@map("neighborhood_landmarks")
+}
+
+model NeighborhoodAlias {
+  id             String  @id @default(cuid())
+  neighborhoodId String
+  alias          String  @db.VarChar(160)
+  locale         String  @default("fr") @db.VarChar(5)
+  isDemo         Boolean @default(false)
+
+  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+
+  @@unique([neighborhoodId, alias])
+  @@index([alias])
+  @@map("neighborhood_aliases")
+}
+
+// ---------------------------------------------------------------------------
+// Signalements
+// ---------------------------------------------------------------------------
+
+enum ReportType {
+  FLOODING
+  BLOCKED_DRAIN
+  WASTE_DUMP
+  ROAD_CUT
+  OTHER
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ReportStatus {
+  NEW
+  VERIFIED
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
+/// Mode de rattachement au quartier (CDC §4.5).
+enum NeighborhoodAttachment {
+  AUTOMATIC
+  CORRECTED
+  UNIDENTIFIED
+}
+
+enum ResolutionFeedback {
+  CONFIRMED
+  REOPENED
+}
+
+enum ReportSource {
+  WEB
+  MESSAGING
+}
+
+model Report {
+  id                   String                 @id @default(cuid())
+  /// Numéro de suivi communiqué à l'habitant.
+  trackingCode         String                 @unique @db.VarChar(20)
+  /// Identifiant généré par l'appareil : clé d'idempotence pour la file hors-ligne (D-027).
+  clientId             String?                @unique @db.VarChar(36)
+  type                 ReportType
+  severity             Severity
+  description          String?                @db.Text
+  /// Position précise : jamais exposée telle quelle dans les API publiques (EXG-39).
+  lat                  Decimal                @db.Decimal(9, 6)
+  lng                  Decimal                @db.Decimal(9, 6)
+  /// Vide si « quartier non identifié ».
+  neighborhoodId       String?
+  attachment           NeighborhoodAttachment @default(AUTOMATIC)
+  isApproximate        Boolean                @default(false)
+  status               ReportStatus           @default(NEW)
+  /// Facultatif : signalement possible sans compte (D-005).
+  authorId             String?
+  /// Agent chargé du traitement (back-office, jamais exposé publiquement).
+  assigneeId           String?
+  /// Doublon fusionné vers ce signalement principal (D-038).
+  duplicateOfId        String?
+  confirmationCount    Int                    @default(0)
+  source               ReportSource           @default(WEB)
+  isDemo               Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  resolvedAt           DateTime?
+  /// Escalade (D-056) : 0 aucune, 1 agent, 2 administrateur.
+  escalationLevel      Int                    @default(0)
+  escalatedAt          DateTime?
+  /// Exécution du simulateur de démonstration qui a créé ce signalement (D-063).
+  simulationRunId      String?                @db.VarChar(40)
+  /// Réponse de l'auteur à « Le problème est-il résolu ? » (EXG-32).
+  resolutionFeedback   ResolutionFeedback?
+  resolutionFeedbackAt DateTime?
+
+  neighborhood  Neighborhood?         @relation(fields: [neighborhoodId], references: [id])
+  author        User?                 @relation("ReportAuthor", fields: [authorId], references: [id])
+  assignee      User?                 @relation("ReportAssignee", fields: [assigneeId], references: [id])
+  duplicateOf   Report?               @relation("ReportDuplicate", fields: [duplicateOfId], references: [id])
+  duplicates    Report[]              @relation("ReportDuplicate")
+  photos        ReportPhoto[]
+  votes         ReportVote[]
+  comments      ReportComment[]
+  statusHistory ReportStatusHistory[]
+  abuseFlags    AbuseFlag[]
+  notifications UserNotification[]
+  cleanups      CleanupOperation[]
+
+  @@index([lat, lng])
+  @@index([status, createdAt])
+  @@index([neighborhoodId, status])
+  @@index([type, createdAt])
+  @@index([assigneeId, status])
+  @@map("reports")
+}
+
+model ReportPhoto {
+  id         String   @id @default(cuid())
+  reportId   String
+  /// Clé de stockage (local ou compatible S3). Métadonnées EXIF supprimées avant stockage.
+  storageKey String   @db.VarChar(255)
+  mimeType   String   @db.VarChar(40)
+  sizeBytes  Int
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("report_photos")
+}
+
+/// « Je vois aussi ce problème ». `voterKey` : identifiant haché (compte ou appareil),
+/// un seul vote par signalement.
+model ReportVote {
+  id        String   @id @default(cuid())
+  reportId  String
+  userId    String?
+  voterKey  String   @db.VarChar(128)
+  createdAt DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@unique([reportId, voterKey])
+  @@map("report_votes")
+}
+
+/// Commentaire public : publié tout de suite, masquable par la modération (choix de l'équipe).
+enum CommentStatus {
+  PUBLISHED
+  HIDDEN
+}
+
+model ReportComment {
+  id         String        @id @default(cuid())
+  reportId   String
+  authorId   String?
+  body       String        @db.Text
+  /// Note interne du back-office : jamais exposée publiquement.
+  isInternal Boolean       @default(false)
+  status     CommentStatus @default(PUBLISHED)
+  isDemo     Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+
+  report     Report      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  author     User?       @relation(fields: [authorId], references: [id])
+  abuseFlags AbuseFlag[]
+
+  @@index([reportId, createdAt])
+  @@map("report_comments")
+}
+
+model ReportStatusHistory {
+  id          String        @id @default(cuid())
+  reportId    String
+  fromStatus  ReportStatus?
+  toStatus    ReportStatus
+  changedById String?
+  note        String?       @db.VarChar(500)
+  createdAt   DateTime      @default(now())
+
+  report    Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  changedBy User?  @relation(fields: [changedById], references: [id])
+
+  @@index([reportId, createdAt])
+  @@map("report_status_history")
+}
+
+// ---------------------------------------------------------------------------
+// Indice de risque (Phase 4, CDC §5) – indice par règles, jamais une probabilité
+// ---------------------------------------------------------------------------
+
+enum RiskLevel {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+/// Cellule de la grille du pilote (D-044). Altitude et pente précalculées (SRTM).
+model RiskCell {
+  id                String   @id @default(cuid())
+  row               Int
+  col               Int
+  centerLat         Decimal  @db.Decimal(9, 6)
+  centerLng         Decimal  @db.Decimal(9, 6)
+  sizeMeters        Int
+  /// Absente si le relevé SRTM manque : le facteur est alors « donnée absente ».
+  elevationMeters   Decimal? @db.Decimal(7, 2)
+  /// Altitude de la cellule moins la moyenne de ses voisines (négatif = zone basse).
+  relativeElevation Decimal? @db.Decimal(6, 2)
+  slopePercent      Decimal? @db.Decimal(6, 2)
+  elevationSource   String?  @db.VarChar(160)
+  /// Vide si aucun quartier n'est clairement identifié.
+  neighborhoodId    String?
+  isDemo            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  neighborhood Neighborhood?    @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+  predictions  RiskPrediction[]
+  labels       EpisodeLabel[]
+
+  @@unique([row, col])
+  @@index([centerLat, centerLng])
+  @@index([neighborhoodId])
+  @@map("risk_cells")
+}
+
+/// Relevé de prévision météo (D-045). Le dernier est réutilisé en cas de panne (EXG-09).
+model WeatherSnapshot {
+  id        String   @id @default(cuid())
+  /// Point de prévision (centre des repères du pilote), arrondi.
+  lat       Decimal  @db.Decimal(8, 4)
+  lng       Decimal  @db.Decimal(8, 4)
+  source    String   @db.VarChar(80)
+  /// Pluie horaire : { times: string[], precipitationMm: (number | null)[] }.
+  hourly    Json
+  fetchedAt DateTime @default(now())
+  /// Météo injectée (tests, simulateur de démonstration) : jamais présentée comme réelle.
+  isDemo    Boolean  @default(false)
+
+  runs RiskRun[]
+
+  @@index([fetchedAt])
+  @@map("weather_snapshots")
+}
+
+/// Version de la grille de règles (EXG-42) : une seule active à la fois.
+model RuleVersion {
+  id          String    @id @default(cuid())
+  number      Int       @unique
+  name        String    @db.VarChar(160)
+  notes       String?   @db.Text
+  /// Poids, paliers et seuils de niveaux (validés par Zod, src/validators/risk.ts).
+  params      Json
+  isActive    Boolean   @default(false)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  activatedAt DateTime?
+
+  createdBy   User?            @relation("RuleVersionCreator", fields: [createdById], references: [id])
+  runs        RiskRun[]
+  predictions RiskPrediction[]
+
+  @@index([isActive])
+  @@map("rule_versions")
+}
+
+/// Exécution de la tâche de recalcul (D-048) ; les pages lisent la dernière.
+model RiskRun {
+  id                String   @id @default(cuid())
+  ruleVersionId     String
+  weatherSnapshotId String?
+  /// Vrai si la météo du moment était indisponible et que le dernier relevé a été utilisé.
+  weatherStale      Boolean  @default(false)
+  cellCount         Int      @default(0)
+  draftsCreated     Int      @default(0)
+  trigger           String   @db.VarChar(20)
+  isDemo            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  ruleVersion     RuleVersion      @relation(fields: [ruleVersionId], references: [id])
+  weatherSnapshot WeatherSnapshot? @relation(fields: [weatherSnapshotId], references: [id])
+  predictions     RiskPrediction[]
+
+  @@index([createdAt])
+  @@map("risk_runs")
+}
+
+enum RiskScope {
+  CELL
+  NEIGHBORHOOD
+}
+
+/// Indice enregistré (jamais écrasé) pour la comparaison avec le réel (CDC §5.7, §6).
+model RiskPrediction {
+  id               String     @id @default(cuid())
+  runId            String
+  scope            RiskScope
+  cellId           String?
+  neighborhoodId   String?
+  horizonHours     Int
+  /// Vides si les données sont insuffisantes (« données limitées »).
+  score            Int?
+  level            RiskLevel?
+  /// Détail des facteurs (src/lib/risk/types.ts).
+  factors          Json
+  ruleVersionId    String
+  weatherFetchedAt DateTime?
+  isDemo           Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+
+  run          RiskRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  cell         RiskCell?     @relation(fields: [cellId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood? @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+  ruleVersion  RuleVersion   @relation(fields: [ruleVersionId], references: [id])
+  alerts       Alert[]
+
+  @@index([runId, scope, horizonHours])
+  @@index([neighborhoodId, createdAt])
+  @@map("risk_predictions")
+}
+
+// ---------------------------------------------------------------------------
+// Alertes et abonnements (Phase 4, CDC §4.6)
+// ---------------------------------------------------------------------------
+
+enum AlertType {
+  OFFICIAL
+  INDICATIVE
+}
+
+enum AlertStatus {
+  /// Brouillon en attente d'approbation : rien n'est envoyé (EXG-29).
+  PENDING_APPROVAL
+  /// Approuvée, envoi en cours ou à reprendre.
+  APPROVED
+  /// Approuvée, envoi à l'heure programmée.
+  SCHEDULED
+  SENT
+  REJECTED
+  CANCELLED
+}
+
+enum AlertOrigin {
+  MANUAL
+  RISK_INDEX
+}
+
+model Alert {
+  id               String      @id @default(cuid())
+  type             AlertType
+  status           AlertStatus @default(PENDING_APPROVAL)
+  origin           AlertOrigin @default(MANUAL)
+  level            RiskLevel
+  /// Émetteur affiché (obligatoire pour une alerte officielle).
+  issuerName       String      @db.VarChar(160)
+  title            String      @db.VarChar(160)
+  messageFr        String      @db.Text
+  /// Diffusé seulement si relu par un locuteur natif (CDC §4.6).
+  messageWo        String?     @db.Text
+  woReviewed       Boolean     @default(false)
+  advice           String?     @db.Text
+  validFrom        DateTime
+  validUntil       DateTime
+  scheduledAt      DateTime?
+  sentAt           DateTime?
+  /// Vide pour un brouillon créé par l'indice.
+  createdById      String?
+  riskPredictionId String?
+  isDemo           Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  createdBy      User?               @relation("AlertCreator", fields: [createdById], references: [id])
+  riskPrediction RiskPrediction?     @relation(fields: [riskPredictionId], references: [id], onDelete: SetNull)
+  neighborhoods  AlertNeighborhood[]
+  approvals      AlertApproval[]
+  deliveries     AlertDelivery[]
+
+  @@index([status, validUntil])
+  @@index([createdAt])
+  @@map("alerts")
+}
+
+model AlertNeighborhood {
+  alertId        String
+  neighborhoodId String
+
+  alert        Alert        @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+
+  @@id([alertId, neighborhoodId])
+  @@index([neighborhoodId])
+  @@map("alert_neighborhoods")
+}
+
+enum AlertDecision {
+  APPROVED
+  REJECTED
+}
+
+/// Décision humaine journalisée : qui, quand, motif et modifications (EXG-29).
+model AlertApproval {
+  id         String        @id @default(cuid())
+  alertId    String
+  approverId String
+  decision   AlertDecision
+  reason     String?       @db.VarChar(500)
+  /// Champs modifiés à l'approbation (avant et après), sans donnée personnelle.
+  changes    Json?
+  createdAt  DateTime      @default(now())
+
+  alert    Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  approver User  @relation("AlertApprover", fields: [approverId], references: [id])
+
+  @@index([alertId])
+  @@map("alert_approvals")
+}
+
+enum DeliveryChannel {
+  /// Notification dans l'application (Mon espace) : réelle.
+  IN_APP
+  /// Notification web : mode simulation (D-051).
+  WEB_PUSH
+}
+
+enum DeliveryStatus {
+  DELIVERED
+  SIMULATED
+  FAILED
+}
+
+model AlertDelivery {
+  id             String          @id @default(cuid())
+  alertId        String
+  subscriptionId String?
+  userId         String?
+  channel        DeliveryChannel
+  status         DeliveryStatus
+  /// Mode actif au moment de l'envoi (simulation ou live), affiché (EXG-17).
+  mode           String          @db.VarChar(20)
+  locale         String          @db.VarChar(5)
+  error          String?         @db.VarChar(500)
+  readAt         DateTime?
+  createdAt      DateTime        @default(now())
+
+  alert        Alert         @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user         User?         @relation("AlertDeliveryUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([alertId, subscriptionId, channel])
+  @@index([userId, createdAt])
+  @@map("alert_deliveries")
+}
+
+/// Abonnement aux alertes (EXG-11) : par quartier(s) ou par position et rayon.
+model Subscription {
+  id             String    @id @default(cuid())
+  userId         String
+  /// Position privée de l'abonné : jamais exposée publiquement.
+  lat            Decimal?  @db.Decimal(9, 6)
+  lng            Decimal?  @db.Decimal(9, 6)
+  radiusMeters   Int?
+  minLevel       RiskLevel @default(MODERATE)
+  locale         String    @default("fr") @db.VarChar(5)
+  channelInApp   Boolean   @default(true)
+  channelWebPush Boolean   @default(false)
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user          User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  neighborhoods SubscriptionNeighborhood[]
+  deliveries    AlertDelivery[]
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+model SubscriptionNeighborhood {
+  subscriptionId String
+  neighborhoodId String
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
+
+  @@id([subscriptionId, neighborhoodId])
+  @@index([neighborhoodId])
+  @@map("subscription_neighborhoods")
+}
+
+// ---------------------------------------------------------------------------
+// Apprentissage, suivi et curage (Phase 5, CDC §4.2, §4.3, §4.7, §5.7)
+// ---------------------------------------------------------------------------
+
+enum EpisodeStatus {
+  /// Étiquetage en cours.
+  OPEN
+  /// Étiquettes validées : l'épisode compte pour la qualité de l'indice (D-054).
+  VALIDATED
+}
+
+/// Épisode de pluie déclaré par une personne (D-053).
+model RainEpisode {
+  id             String        @id @default(cuid())
+  name           String        @db.VarChar(160)
+  startsAt       DateTime
+  endsAt         DateTime
+  /// Pluie observée sur l'épisode, calculée à partir des relevés enregistrés (absente sinon).
+  observedRainMm Decimal?      @db.Decimal(6, 1)
+  status         EpisodeStatus @default(OPEN)
+  validatedAt    DateTime?
+  validatedById  String?
+  createdById    String
+  isDemo         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  createdBy   User             @relation("EpisodeCreator", fields: [createdById], references: [id])
+  validatedBy User?            @relation("EpisodeValidator", fields: [validatedById], references: [id])
+  labels      EpisodeLabel[]
+  prompts     FeedbackPrompt[]
+
+  @@index([startsAt])
+  @@map("rain_episodes")
+}
+
+enum FloodLabel {
+  FLOODED
+  NOT_FLOODED
+  /// Valeur par défaut : une absence de signalement ne prouve pas l'absence d'inondation.
+  UNKNOWN
+}
+
+/// Étiquette « inondé / non inondé » d'une cellule pour un épisode, validée par une personne.
+model EpisodeLabel {
+  id          String     @id @default(cuid())
+  episodeId   String
+  cellId      String
+  label       FloodLabel
+  note        String?    @db.VarChar(500)
+  labeledById String
+  isDemo      Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  episode   RainEpisode           @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  cell      RiskCell              @relation(fields: [cellId], references: [id], onDelete: Cascade)
+  labeledBy User                  @relation("LabelAuthor", fields: [labeledById], references: [id])
+  history   EpisodeLabelHistory[]
+
+  @@unique([episodeId, cellId])
+  @@map("episode_labels")
+}
+
+model EpisodeLabelHistory {
+  id          String      @id @default(cuid())
+  labelId     String
+  fromLabel   FloodLabel?
+  toLabel     FloodLabel
+  changedById String
+  createdAt   DateTime    @default(now())
+
+  label     EpisodeLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  changedBy User         @relation("LabelChanger", fields: [changedById], references: [id])
+
+  @@index([labelId])
+  @@map("episode_label_history")
+}
+
+enum FeedbackAnswer {
+  FLOODED
+  NOT_FLOODED
+  DONT_KNOW
+}
+
+/// Question « Votre rue a-t-elle été inondée ? » posée à un abonné après un épisode.
+/// La réponse est un indice pour le délégué, jamais une étiquette (D-053).
+model FeedbackPrompt {
+  id             String          @id @default(cuid())
+  episodeId      String
+  userId         String
+  neighborhoodId String?
+  answer         FeedbackAnswer?
+  answeredAt     DateTime?
+  createdAt      DateTime        @default(now())
+
+  episode      RainEpisode   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood? @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+
+  @@unique([episodeId, userId])
+  @@map("feedback_prompts")
+}
+
+enum NotificationKind {
+  REPORT_STATUS
+  RESOLUTION_CHECK
+  ESCALATION
+  EPISODE_FEEDBACK
+}
+
+/// Notification dans l'application (D-055). Aucun canal externe.
+model UserNotification {
+  id        String           @id @default(cuid())
+  userId    String
+  kind      NotificationKind
+  title     String           @db.VarChar(200)
+  body      String?          @db.Text
+  /// Lien interne (chemin relatif).
+  link      String?          @db.VarChar(300)
+  reportId  String?
+  episodeId String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report Report? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_notifications")
+}
+
+/// Délai cible de première réponse (D-056). Vide = toutes les valeurs.
+model EscalationRule {
+  id          String      @id @default(cuid())
+  /// Clé unique « TYPE:GRAVITÉ », « * » pour toutes les valeurs.
+  scope       String      @unique @db.VarChar(40)
+  type        ReportType?
+  severity    Severity?
+  targetHours Int
+  updatedAt   DateTime    @updatedAt
+
+  @@map("escalation_rules")
+}
+
+enum CleanupStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+/// Opération de curage liée à un signalement de caniveau ou de dépôt (D-058).
+model CleanupOperation {
+  id          String        @id @default(cuid())
+  reportId    String
+  team        String        @db.VarChar(160)
+  status      CleanupStatus @default(PLANNED)
+  plannedFor  DateTime?
+  completedAt DateTime?
+  note        String?       @db.VarChar(1000)
+  createdById String
+  isDemo      Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  report    Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  createdBy User           @relation("CleanupCreator", fields: [createdById], references: [id])
+  photos    CleanupPhoto[]
+
+  @@index([status])
+  @@index([reportId])
+  @@map("cleanup_operations")
+}
+
+enum CleanupPhotoPhase {
+  BEFORE
+  AFTER
+}
+
+model CleanupPhoto {
+  id          String            @id @default(cuid())
+  operationId String
+  phase       CleanupPhotoPhase
+  storageKey  String            @db.VarChar(255)
+  mimeType    String            @db.VarChar(40)
+  sizeBytes   Int
+  width       Int
+  height      Int
+  createdAt   DateTime          @default(now())
+
+  operation CleanupOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@map("cleanup_photos")
+}
+
+// ---------------------------------------------------------------------------
+// Supervision et paramètres
+// ---------------------------------------------------------------------------
+
+/// Exécution d'une tâche planifiée (supervision, EXG-37).
+model JobRun {
+  id         String    @id @default(cuid())
+  name       String    @db.VarChar(40)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean?
+  /// Résumé chiffré (compteurs), sans donnée personnelle.
+  summary    Json?
+  error      String?   @db.VarChar(500)
+
+  @@index([name, startedAt])
+  @@map("job_runs")
+}
+
+/// Journal d'erreurs, sans donnée personnelle (EXG-37).
+model ErrorLog {
+  id        String   @id @default(cuid())
+  source    String   @db.VarChar(80)
+  message   String   @db.Text
+  context   Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("error_logs")
+}
+
+model Setting {
+  key       String   @id @db.VarChar(80)
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

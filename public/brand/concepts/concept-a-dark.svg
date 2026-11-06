@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="t">
+  <title id="t">Banlieue Alerte – concept A, repère d'eau (fond sombre)</title>
+  <path fill="#F7F9F7" d="M32 60C26 52 12 39 12 26a20 20 0 0 1 40 0c0 13-14 26-20 34Z"/>
+  <circle cx="32" cy="26" r="12" fill="#0B6FA4"/>
+  <path fill="#F7F9F7" d="M32 16c-3 4-6.5 8.2-6.5 13a6.5 6.5 0 0 0 13 0c0-4.8-3.5-9-6.5-13Z"/>
+</svg>

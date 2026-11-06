@@ -1,0 +1,32 @@
+# dépendances
+node_modules/
+
+# build
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# prisma
+src/generated/
+
+# tests
+playwright-report/
+test-results/
+coverage/
+
+# environnement (jamais de secret dans le dépôt)
+.env
+.env.*
+!.env.example
+
+# certificats HTTPS locaux
+certificates/
+
+# divers
+.DS_Store
+*.log
+uploads/
+
+# Sauvegardes chiffrées (scripts/backup.sh)
+backups/

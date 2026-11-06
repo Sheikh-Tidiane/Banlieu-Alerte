@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+backups
+uploads
+test-results
+playwright-report
+coverage
+src/generated
+docs/screenshots
+*.log
+tsconfig.tsbuildinfo

@@ -1,0 +1,218 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens – source unique (docs/DESIGN_ET_MARQUE.md §1 et §2.1).
+ * Les composants n'utilisent que ces tokens, via les classes Tailwind générées par @theme.
+ * Les valeurs sémantiques (--surface, --text…) sont isolées pour qu'un mode sombre
+ * (niveau Vision) puisse les redéfinir sans toucher aux composants.
+ */
+:root {
+  /* Palette de marque */
+  --brand-green: #1b5e20;
+  --brand-green-light: #2e7d32;
+  --brand-yellow: #f9b72b;
+  --brand-water: #0b6fa4;
+
+  /* Couleurs fonctionnelles */
+  --alert-red: #d32f2f;
+  --vigilance-orange: #f57c00;
+  --safety-green: #388e3c;
+
+  /* Neutres */
+  --neutral-bg: #f7f9f7;
+  --neutral-surface: #ffffff;
+  --neutral-ink: #14211a;
+  --neutral-muted: #4a5a50;
+  --neutral-line: #dde5de;
+
+  /* Rôles sémantiques */
+  --surface: var(--neutral-bg);
+  --surface-raised: var(--neutral-surface);
+  --text: var(--neutral-ink);
+  --text-muted: var(--neutral-muted);
+  --border: var(--neutral-line);
+  --focus-ring: var(--brand-water);
+}
+
+@theme inline {
+  --color-primary: var(--brand-green);
+  --color-primary-light: var(--brand-green-light);
+  --color-primary-foreground: var(--neutral-surface);
+  --color-accent: var(--brand-yellow);
+  --color-accent-foreground: var(--neutral-ink);
+  --color-water: var(--brand-water);
+  --color-water-foreground: var(--neutral-surface);
+  --color-danger: var(--alert-red);
+  --color-danger-foreground: var(--neutral-surface);
+  --color-warning: var(--vigilance-orange);
+  --color-safe: var(--safety-green);
+
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-line: var(--border);
+  --color-focus: var(--focus-ring);
+
+  /* Niveaux de risque : toujours accompagnés d'une icône et d'un texte */
+  --color-risk-low: var(--safety-green);
+  --color-risk-moderate: var(--brand-yellow);
+  --color-risk-high: var(--vigilance-orange);
+  --color-risk-critical: var(--alert-red);
+
+  --font-heading: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 14px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 1px 2px rgb(20 33 26 / 0.06), 0 4px 16px rgb(20 33 26 / 0.06);
+  --shadow-raised: 0 2px 4px rgb(20 33 26 / 0.08), 0 12px 32px rgb(20 33 26 / 0.1);
+
+  /* Zone tactile minimale (WCAG, CDC §12) */
+  --spacing-touch: 48px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: var(--text);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  dialog::backdrop {
+    background-color: rgb(20 33 26 / 0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Marqueurs de carte (src/components/map/leaflet.ts). Le type se lit aussi au pictogramme. */
+@layer components {
+  .ba-marker {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 2px solid var(--neutral-surface);
+    border-radius: 999px;
+    color: var(--neutral-surface);
+    box-shadow: 0 1px 4px rgb(20 33 26 / 0.35);
+  }
+  .ba-marker svg {
+    width: 18px;
+    height: 18px;
+  }
+  .ba-marker--flooding {
+    background: var(--brand-water);
+  }
+  .ba-marker--blocked_drain {
+    background: var(--brand-green);
+  }
+  .ba-marker--waste_dump {
+    background: var(--neutral-muted);
+  }
+  .ba-marker--road_cut {
+    background: var(--alert-red);
+  }
+  .ba-marker--other {
+    background: var(--neutral-ink);
+  }
+  .ba-marker--demo {
+    border-style: dashed;
+    border-color: var(--brand-yellow);
+  }
+  .ba-pin {
+    display: block;
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--neutral-surface);
+    border-radius: 50% 50% 50% 0;
+    background: var(--alert-red);
+    box-shadow: 0 2px 6px rgb(20 33 26 / 0.4);
+    transform: rotate(-45deg);
+  }
+  .leaflet-container {
+    font-family: var(--font-sans);
+  }
+  .ba-popup p {
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+  .ba-popup-title {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .ba-popup-demo {
+    display: inline-block;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--brand-yellow) 30%, transparent);
+    font-size: 12px;
+  }
+  .ba-popup ul {
+    margin: 0 0 4px;
+    padding-left: 16px;
+    color: var(--text);
+  }
+  .ba-popup-meta {
+    font-size: 12px;
+    color: var(--text-muted) !important;
+  }
+  .ba-offline-notice {
+    position: absolute;
+    left: 50%;
+    bottom: 28px;
+    z-index: 1000;
+    transform: translateX(-50%);
+    max-width: calc(100% - 24px);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgb(20 33 26 / 0.25);
+  }
+  .ba-popup-link {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 10px 0;
+    font-weight: 600;
+    color: var(--brand-green) !important;
+  }
+  .marker-cluster div {
+    font-family: var(--font-heading);
+    font-weight: 600;
+  }
+}

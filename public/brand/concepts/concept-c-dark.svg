@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="t">
+  <title id="t">Banlieue Alerte – concept C, toit et niveau d'eau (fond sombre)</title>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#2E7D32"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" d="M16 32 32 18l16 14"/>
+  <path fill="none" stroke="#F9B72B" stroke-width="5" stroke-linecap="round" d="M14 44c2.25-3 6.75-3 9 0s6.75 3 9 0 6.75-3 9 0 6.75 3 9 0"/>
+</svg>

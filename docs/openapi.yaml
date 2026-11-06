@@ -1,0 +1,522 @@
+# Généré par scripts/build-openapi.ts – ne pas modifier à la main (npm run openapi).
+openapi: 3.1.0
+info:
+  title: API Banlieue Alerte
+  version: 1.0.0
+  description: >-
+    API REST de Banlieue Alerte. Réponses JSON { data } ou { error: { code, message, details } }.
+    Les routes qui modifient des données exigent un en-tête Origin du site (CSRF, D-035) ;
+    les routes de l’équipe exigent une session (cookie ba_session) et un rôle, et le second
+    facteur pour un administrateur. Les schémas des corps sont les validateurs Zod de src/validators/.
+servers:
+  - url: /
+paths:
+  /api/abuse/{id}/block-author:
+    post:
+      summary: 'bloquer l''auteur d''un commentaire signalé (administrateur).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/abuse/{id}/dismiss:
+    post:
+      summary: 'classer un signalement d''abus sans suite.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/account:
+    delete:
+      summary: 'suppression du compte (signalements anonymisés et conservés).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    get:
+      summary: 'export de toutes mes données (JSON téléchargeable).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    patch:
+      summary: 'nom et langue.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/account/followup:
+    get:
+      summary: 'notifications d''avancement du compte connecté.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'tout marquer comme lu.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/account/notifications:
+    get:
+      summary: 'notifications reçues par le compte.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'tout marquer comme lu.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/admin/escalation-rules:
+    post:
+      summary: 'délais de première réponse (administrateur).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/admin/rules:
+    post:
+      summary: 'nouvelle version de la grille, ou activation (retour en arrière).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/admin/users/{id}/block:
+    post:
+      summary: 'bloquer (sessions fermées) ou débloquer un compte.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/admin/zones:
+    post:
+      summary: 'gestion des communes, quartiers, repères et alias (administrateur).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/alerts:
+    get:
+      summary: 'alertes de la portée de l''utilisateur (back-office).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'nouvelle alerte, en attente d''approbation (jamais envoyée à la création).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/alerts/{id}:
+    get:
+      summary: 'fiche d''une alerte (back-office, dans la portée).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    patch:
+      summary: 'modification d''un brouillon en attente.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/alerts/{id}/approve:
+    post:
+      summary: 'approbation humaine journalisée, puis envoi (EXG-29).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/alerts/{id}/cancel:
+    post:
+      summary: 'annulation d''un brouillon ou d''une alerte programmée ; levée d''une alerte envoyée.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/alerts/{id}/reject:
+    post:
+      summary: 'rejet avec motif.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/alerts/active:
+    get:
+      summary: 'alertes en cours (public, sans créateur ni livraisons).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/auth/login:
+    post:
+      summary: 'connexion par e-mail et mot de passe.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/auth/logout:
+    post:
+      summary: 'invalide la session côté serveur, puis efface le cookie.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/auth/me:
+    get:
+      summary: 'compte connecté (nom et rôle seulement), pour l''en-tête.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/auth/mfa/confirm:
+    post:
+      summary: 'premier code : active le second facteur, renvoie les codes de secours.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/auth/mfa/recovery:
+    post:
+      summary: 'code de secours, à usage unique.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/auth/mfa/verify:
+    post:
+      summary: 'code de l''application à la connexion (EXG-41).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/auth/register:
+    post:
+      summary: 'inscription libre, citoyen uniquement (EXG-33).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/cleanup:
+    post:
+      summary: 'nouvelle opération de curage (agent, administrateur).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/cleanup/{id}:
+    patch:
+      summary: 'statut, note ; « terminée » peut résoudre le signalement lié.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/cleanup/{id}/photos:
+    post:
+      summary: 'photo avant ou après (EXIF retiré, D-024).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/cleanup/priorities:
+    get:
+      summary: 'caniveaux et dépôts ouverts, triés par risque × gravité.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/comments/{id}/abuse:
+    post:
+      summary: 'signaler un commentaire.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/comments/{id}/hide:
+    post:
+      summary: 'masquer ou rétablir un commentaire public (modération).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/demo/reset:
+    post:
+      summary: 'suppression des seules données du simulateur.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/demo/simulate-rain:
+    post:
+      summary: 'épisode de pluie fictif (DEMO_MODE, administrateur ; D-063).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/episodes:
+    get:
+      summary: 'épisodes de pluie (back-office).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'déclaration d''un épisode (agent, administrateur ; D-053).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/episodes/{id}:
+    get:
+      summary: 'cases à étiqueter dans la portée, avec les indices.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/episodes/{id}/labels:
+    post:
+      summary: 'étiquettes « inondé / non inondé / inconnu », avec historique.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/episodes/{id}/validate:
+    post:
+      summary: 'clôture de l''étiquetage (agent, administrateur).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/feedback/flooded:
+    post:
+      summary: '« Votre rue a-t-elle été inondée ? » (indice, jamais étiquette).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/geo/resolve:
+    get:
+      summary: 'quartiers candidats avec leur distance (CDC §10).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/health:
+    get:
+      summary: 'Point de santé (EXG-37) : base, fraîcheur de l''indice, tâche planifiée, erreurs météo, échecs d''envoi, modes actifs. Uniquement des compteurs et des dates.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/invitations:
+    get:
+      summary: 'invitations en attente (administrateur).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'invite un délégué, un agent ou un administrateur (EXG-33).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/invitations/{id}:
+    delete:
+      summary: 'révocation immédiate (journalisée).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/invitations/{id}/accept:
+    post:
+      summary: 'activation du compte invité.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/jobs/risk-refresh:
+    post:
+      summary: 'recalcul de l''indice (D-048). Deux accès : le planificateur avec `Authorization: Bearer <CRON_SECRET>`, ou un administrateur connecté (bouton).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/jobs/run:
+    post:
+      summary: 'tâche planifiée unique (D-057), réservée au planificateur (CRON_SECRET).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/model/performance:
+    get:
+      summary: 'qualité de l''indice ; état vide sous le seuil (EXG-12).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/neighborhoods:
+    get:
+      summary: 'quartiers, pour les filtres de la carte.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/neighborhoods/{id}/risk:
+    get:
+      summary: 'indice du quartier à 24 et 48 h.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/password-resets:
+    post:
+      summary: 'lien de réinitialisation créé par un administrateur.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/password-resets/{id}/accept:
+    post:
+      summary: 'nouveau mot de passe (sessions précédentes fermées).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/photos/{key}:
+    get:
+      summary: 'photo déjà nettoyée de ses métadonnées (D-024).'
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports:
+    get:
+      summary: 'GET /api/reports?bbox=&type=&status=&severity=&neighborhoodId=&days='
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'signalement sans compte (EXG-02).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}:
+    get:
+      summary: 'détail public, par numéro de suivi.'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/abuse:
+    post:
+      summary: 'signaler un abus (modération en Phase 3).'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/assign:
+    post:
+      summary: 'assignation à un agent (ou retrait).'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/comments:
+    post:
+      summary: 'commentaire public, compte connecté obligatoire.'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/confirm:
+    post:
+      summary: '« Je vois aussi ce problème ».'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/feedback:
+    get:
+      summary: 'la question « résolu ? » est-elle posée au compte connecté ?'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'réponse de l''auteur ; « non » rouvre le dossier (EXG-32).'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/merge:
+    post:
+      summary: 'fusion d''un doublon dans un signalement principal (D-038).'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/notes:
+    post:
+      summary: 'note interne, jamais publiée.'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/reports/{code}/status:
+    patch:
+      summary: 'changement de statut (EXG-07).'
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/risk/cells:
+    get:
+      summary: 'cases de la carte de risque (dernier calcul).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/risk/cells/{id}/factors:
+    get:
+      summary: 'détail des facteurs d''une cellule (dernier calcul).'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/risk/forecast:
+    get:
+      summary: 'indice par quartier, facteurs, date des données.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/stats/public:
+    get:
+      summary: 'statistiques par quartier et par mois (données réelles uniquement).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/subscriptions:
+    get:
+      summary: 'abonnements du compte connecté.'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+    post:
+      summary: 'abonnement par quartier(s) ou par position et rayon (EXG-11).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/subscriptions/{id}:
+    delete:
+      summary: 'suppression par son titulaire.'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }
+  /api/weather:
+    get:
+      summary: 'pluie prévue sur 48 h (tranches de 6 h) pour la zone pilote, avec la date et la source du relevé. Un seul point de prévision pour le pilote (D-045).'
+      responses:
+        '200': { description: 'Succès (201 pour une création)' }
+        '4XX': { description: 'Erreur de validation, d’accès ou de débit' }

@@ -1,0 +1,10 @@
+# HTTPS automatique (D-067) : Caddy obtient et renouvelle le certificat pour {$DOMAIN}.
+# En local (DOMAIN=localhost), Caddy utilise un certificat de son autorité interne.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+	# Taille maximale des envois (photos de 5 Mo, avec marge).
+	request_body {
+		max_size 8MB
+	}
+}

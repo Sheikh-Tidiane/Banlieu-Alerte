@@ -1,0 +1,86 @@
+# Production (D-067) : application, base, migrations, tâche planifiée et HTTPS automatique.
+#
+#   cp .env.example .env   # puis remplir les valeurs (secrets longs et aléatoires)
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Variables obligatoires : MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, HASH_SALT, TOTP_ENCRYPTION_KEY,
+# CRON_SECRET, DOMAIN (nom de domaine pointant vers le serveur, pour le certificat HTTPS).
+name: banlieue-alerte
+
+x-app-env: &app-env
+  DATABASE_URL: mysql://${MYSQL_USER:-banlieue}:${MYSQL_PASSWORD:?définir MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-banlieue_alerte}
+  APP_URL: https://${DOMAIN:-localhost}
+  HASH_SALT: ${HASH_SALT:?définir HASH_SALT}
+  TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?définir TOTP_ENCRYPTION_KEY}
+  CRON_SECRET: ${CRON_SECRET:?définir CRON_SECRET}
+  NOTIFICATIONS_MODE: ${NOTIFICATIONS_MODE:-simulation}
+  DEMO_MODE: ${DEMO_MODE:-false}
+  UPLOAD_DIR: /app/uploads
+
+services:
+  db:
+    image: mysql:8.4.7
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-banlieue_alerte}
+      MYSQL_USER: ${MYSQL_USER:-banlieue}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?définir MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?définir MYSQL_ROOT_PASSWORD}
+    command: ['--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'mysqladmin ping -h localhost -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Migrations appliquées avant le démarrage de l'application, puis le service s'arrête.
+  migrate:
+    build: { context: ., target: tools }
+    environment: *app-env
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+
+  app:
+    build: { context: ., target: runner }
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    expose: ['3000']
+
+  # Tâche planifiée unique toutes les 15 minutes (D-057).
+  jobs:
+    build: { context: ., target: tools }
+    restart: unless-stopped
+    environment: *app-env
+    command: ['sh', 'deploy/jobs.sh']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  # HTTPS automatique (certificat Let's Encrypt pour DOMAIN).
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+
+volumes:
+  db-data:
+  uploads:
+  caddy-data:
+  caddy-config:
